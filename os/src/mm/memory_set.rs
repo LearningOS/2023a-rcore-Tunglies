@@ -51,6 +51,35 @@ impl MemorySet {
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
+    /// Check VPN is mapped
+    pub fn is_mapped(
+        &self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        mapped: bool
+    ) -> bool 
+    {
+        // debug!("MemorySet::start_va: {:?}", start_va);
+        debug!("MemorySet::start_va.floor: {:?}", start_va.floor());
+        // debug!("MemorySet::start_va.ceil: {:?}", start_va.ceil());
+        // debug!("MemorySet::end_va: {:?}", end_va);
+        // debug!("MemorySet::end_va.floor: {:?}", end_va.floor());
+        debug!("MemorySet::end_va.ceil: {:?}", end_va.ceil());
+        let vpn_range = VPNRange::new(
+            // VirtPageNum::from(start_va.floor()),
+            // VirtPageNum::from(end_va.ceil())
+            start_va.floor(),
+            end_va.ceil()
+        );
+        vpn_range.into_iter().all(|vpn| {
+            if let Some(pte) = self.translate(vpn) {
+                debug!("MemorySet::({:?})pte.isvalid == mapped: {:?}", vpn, pte.is_valid() == mapped);
+                pte.is_valid() == mapped
+            } else {
+                true
+            }
+        })
+    }
     /// Assume that no conflicts.
     pub fn insert_framed_area(
         &mut self,
@@ -62,6 +91,14 @@ impl MemorySet {
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+    }
+    /// Assume that no conflicts
+    pub fn remove_framed_area(
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr
+    ) {
+        MapArea::new(start_va, end_va, MapType::Framed, MapPermission::U).unmap(&mut self.page_table);
     }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
