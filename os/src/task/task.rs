@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::{TaskContext, add_task};
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM};
+use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM, BIG_STRIDE};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE, MapPermission};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -65,6 +65,14 @@ impl TaskControlBlock {
         let inner = self.inner_exclusive_access();
         inner.syscall_times
     }
+
+    /// Set current pro
+    pub fn current_priority(&self, priority: isize) -> isize {
+        let mut inner = self.inner_exclusive_access();
+        inner.priority = priority;
+        inner.stride = BIG_STRIDE / inner.priority;
+        inner.priority
+    } 
 }
 
 pub struct TaskControlBlockInner {
@@ -101,7 +109,14 @@ pub struct TaskControlBlockInner {
     pub program_brk: usize,
 
     /// Syscall times
-    pub syscall_times: [u32; MAX_SYSCALL_NUM]
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// priority
+    pub priority: isize,
+
+    /// stride
+    pub stride: isize
+    
 }
 
 impl TaskControlBlockInner {
@@ -152,7 +167,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
-                    syscall_times: [0u32; MAX_SYSCALL_NUM]
+                    syscall_times: [0u32; MAX_SYSCALL_NUM],
+                    priority: 16,
+                    stride: 0
                 })
             },
         };
@@ -226,7 +243,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
-                    syscall_times: parent_inner.syscall_times
+                    syscall_times: parent_inner.syscall_times,
+                    priority: parent_inner.priority,
+                    stride: parent_inner.stride
                 })
             },
         });
@@ -276,7 +295,6 @@ impl TaskControlBlock {
     /// Spwan process from task.
     pub fn spwan(&self, task: Arc<TaskControlBlock>, data: &[u8]) -> isize {
         let mut inner = self.inner_exclusive_access();
-
         let tcb = Arc::new(TaskControlBlock::new(data));
 
         inner.parent = Some(Arc::downgrade(&task));

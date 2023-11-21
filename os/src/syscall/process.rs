@@ -9,7 +9,7 @@ use crate::{
     mm::{translated_refmut, translated_str, VirtAddr, MapPermission, translated_byte_buffer},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus, current_mmap, current_is_mapped, current_unmap, current_task_status, current_task_syscall, current_task_spwan,
+        suspend_current_and_run_next, TaskStatus, current_mmap, current_is_mapped, current_unmap, current_task_status, current_task_syscall, current_task_spwan, current_task_priority,
     }, timer::{get_time_us, get_time_ms},
 };
 
@@ -255,8 +255,6 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    debug!("entrying fn::sys_spwan");
-    
     let token = current_user_token();
     let path = translated_str(token, _path);
     if let Some(data) = get_app_data_by_name(&path) {
@@ -272,5 +270,9 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if _prio <= 1 {
+        return -1;
+    }
+    let prio = current_task_priority(_prio);
+    prio
 }

@@ -4,7 +4,7 @@
 //! the current running state of CPU is recorded,
 //! and the replacement and transfer of control flow of different applications are executed.
 
-use super::{__switch};
+use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::config::MAX_SYSCALL_NUM;
@@ -81,6 +81,11 @@ impl Processor {
     pub fn spwan(&self, data: &[u8]) -> isize {
         let current = self.current().unwrap();
         self.current().unwrap().spwan(current, data)
+    }
+
+    /// Set priority
+    pub fn priority(&self, priority: isize) -> isize {
+        self.current().unwrap().current_priority(priority)
     }
 }
 
@@ -164,6 +169,11 @@ pub fn current_task_increase_syscall(syscall_id: usize) {
 /// Get the current task syscall times
 pub fn current_task_syscall() -> [u32; MAX_SYSCALL_NUM] {
     PROCESSOR.exclusive_access().current_syscall()
+}
+
+/// Set the current task
+pub fn current_task_priority(priority: isize) -> isize {
+    PROCESSOR.exclusive_access().priority(priority)
 }
 
 ///Get the mutable reference to trap context of current task
