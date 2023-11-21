@@ -7,6 +7,8 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::{VirtAddr, MapPermission};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -43,6 +45,36 @@ impl Processor {
     ///Get current task in cloning semanteme
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
+    }
+
+    /// Is Maped
+    pub fn is_mapped(&self, start_va: VirtAddr, end_va: VirtAddr, mapped: bool) -> bool {
+        self.current().unwrap().is_mapped(start_va, end_va, mapped)
+    }
+
+    /// MMAP
+    pub fn mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+        self.current().unwrap().mmap(start_va, end_va, permission);
+    }
+
+    /// Unmap
+    pub fn unmap(&self, start_va: VirtAddr, end_va: VirtAddr) {
+        self.current().unwrap().unmap(start_va, end_va);
+    }
+
+    /// Status
+    pub fn status(&self) -> TaskStatus {
+        self.current().unwrap().status()
+    }
+
+    /// Increase syscall
+    pub fn increase_syscall(&self, syscall_id: usize) {
+        self.current().unwrap().increase_syscall(syscall_id);
+    }
+
+    /// Current syscall
+    pub fn current_syscall(&self) -> [u32; MAX_SYSCALL_NUM] {
+        self.current().unwrap().current_syscall()
     }
 }
 
@@ -86,10 +118,41 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
     PROCESSOR.exclusive_access().current()
 }
 
+
+/// Is Mapped
+pub fn current_is_mapped(start_va: VirtAddr, end_va: VirtAddr, mapped: bool) -> bool {
+    PROCESSOR.exclusive_access().is_mapped(start_va, end_va, mapped)
+}
+
+/// MMAP
+pub fn current_mmap(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+    PROCESSOR.exclusive_access().mmap(start_va, end_va, permission);
+}
+
+/// UnMMAP
+pub fn current_unmap(start_va: VirtAddr, end_va: VirtAddr) {
+    PROCESSOR.exclusive_access().unmap(start_va, end_va);
+}
+
 /// Get the current user token(addr of page table)
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
     task.get_user_token()
+}
+
+/// Get the current task status
+pub fn current_task_status() -> TaskStatus {
+    PROCESSOR.exclusive_access().status()
+}
+
+/// Increase the current task syscall times
+pub fn current_task_increase_syscall(syscall_id: usize) {
+    PROCESSOR.exclusive_access().increase_syscall(syscall_id);
+}
+
+/// Get the current task syscall times
+pub fn current_task_syscall() -> [u32; MAX_SYSCALL_NUM] {
+    PROCESSOR.exclusive_access().current_syscall()
 }
 
 ///Get the mutable reference to trap context of current task

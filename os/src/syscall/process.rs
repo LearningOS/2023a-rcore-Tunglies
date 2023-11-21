@@ -1,14 +1,16 @@
 //! Process management syscalls
+use core::mem::size_of;
+
 use alloc::sync::Arc;
 
 use crate::{
     config::MAX_SYSCALL_NUM,
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
+    mm::{translated_refmut, translated_str, VirtAddr, MapPermission, translated_byte_buffer},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
-    },
+        suspend_current_and_run_next, TaskStatus, current_mmap, current_is_mapped, current_unmap, current_task_status, current_task_syscall
+    }, timer::{get_time_us, get_time_ms},
 };
 
 #[repr(C)]
@@ -122,7 +124,27 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let ptr = _ts as *const u8;
+    let len = size_of::<TimeVal>();
+    let buffers = translated_byte_buffer(token, ptr, len);
+
+    let us = get_time_us();
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+
+    let mut time_val_ptr = &time_val as *const _ as *const u8;
+
+    for buffer in buffers {
+        unsafe {
+            time_val_ptr.copy_to(buffer.as_mut_ptr(), buffer.len());
+            time_val_ptr = time_val_ptr.add(buffer.len());
+        }
+    }
+
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -133,7 +155,27 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let ptr = _ti as *const u8;
+    let len = size_of::<TaskInfo>();
+    let buffers = translated_byte_buffer(token, ptr, len);
+
+    let ti = TaskInfo {
+        status: current_task_status(),
+        syscall_times: current_task_syscall(),
+        time: get_time_ms(),
+    };
+
+    let mut ti_ptr = &ti as *const _ as *const u8;
+
+    for buffer in buffers {
+        unsafe {
+            ti_ptr.copy_to(buffer.as_mut_ptr(), buffer.len());
+            ti_ptr = ti_ptr.add(buffer.len());
+        }
+    }
+
+    0
 }
 
 /// YOUR JOB: Implement mmap.
@@ -142,7 +184,36 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let start_va = VirtAddr(_start);
+    let end_va = VirtAddr(_start + _len);
+
+    if !start_va.aligned() {
+        return -1;
+    }
+
+    if _port & !0x7 != 0 || _port & 0x7 == 0 {
+        return -1;
+    }
+
+    let mut permission = MapPermission::U;
+
+    if _port & (1<<0) != 0 {
+        permission |= MapPermission::R;
+    }
+    if _port & (1<<1) != 0 {
+        permission |= MapPermission::W;
+    }
+    if _port & (1<<3) != 0 {
+        permission |= MapPermission::X;
+    }
+    
+    if !current_is_mapped(start_va, end_va, false) {
+        return -1;
+    }
+
+    current_mmap(start_va, end_va, permission);
+
+    0
 }
 
 /// YOUR JOB: Implement munmap.
@@ -151,7 +222,20 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let start_va = VirtAddr(_start);
+    let end_va = VirtAddr(_start+_len);
+
+    if !start_va.aligned() {
+        return -1;
+    }
+
+    if !current_is_mapped(start_va, end_va, true) {
+        return -1;
+    }
+
+    current_unmap(start_va, end_va);
+
+    0
 }
 
 /// change data segment size

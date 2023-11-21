@@ -1,8 +1,8 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM};
+use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE, MapPermission};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -33,6 +33,37 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
+    }
+    /// Is mapped
+    pub fn is_mapped(&self, start_va: VirtAddr, end_va: VirtAddr, mapped: bool) -> bool {
+        let inner = self.inner_exclusive_access();
+        inner.memory_set.is_mapped(start_va, end_va, mapped)
+    }
+    /// MMAP
+    pub fn mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set.insert_framed_area(start_va, end_va, permission);
+    }
+    /// Unmap
+    pub fn unmap(&self, start_va: VirtAddr, end_va: VirtAddr) {
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set.remove_framed_area(start_va, end_va);
+    }
+    /// Current status
+    pub fn status(&self) -> TaskStatus {
+        let inner = self.inner_exclusive_access();
+        inner.task_status
+    }
+    /// Increase syscall
+    pub fn increase_syscall(&self, syscall_id: usize) {
+        let mut inner = self.inner_exclusive_access();
+        inner.syscall_times[syscall_id] += 1;
+    }
+
+    /// Current syscall
+    pub fn current_syscall(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner_exclusive_access();
+        inner.syscall_times
     }
 }
 
@@ -68,6 +99,9 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// Syscall times
+    pub syscall_times: [u32; MAX_SYSCALL_NUM]
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +152,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    syscall_times: [0u32; MAX_SYSCALL_NUM]
                 })
             },
         };
@@ -191,6 +226,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    syscall_times: parent_inner.syscall_times
                 })
             },
         });

@@ -48,6 +48,35 @@ impl MemorySet {
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
+    /// Check VPN is mapped
+    pub fn is_mapped(
+        &self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        mapped: bool
+    ) -> bool 
+    {
+        let vpn_range = VPNRange::new(
+            start_va.floor(),
+            end_va.ceil()
+        );
+        vpn_range.into_iter().all(|vpn| {
+            if let Some(pte) = self.translate(vpn) {
+                debug!("MemorySet::({:?})pte.isvalid == mapped: {:?}", vpn, pte.is_valid() == mapped);
+                pte.is_valid() == mapped
+            } else {
+                true
+            }
+        })
+    }
+    /// Assume that no conflicts
+    pub fn remove_framed_area(
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr
+    ) {
+        MapArea::new(start_va, end_va, MapType::Framed, MapPermission::U).unmap(&mut self.page_table);
+    }
     /// Assume that no conflicts.
     pub fn insert_framed_area(
         &mut self,
