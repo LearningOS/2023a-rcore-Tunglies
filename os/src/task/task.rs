@@ -1,5 +1,5 @@
 //! Types related to task management & Functions for completely changing TCB
-use super::TaskContext;
+use super::{TaskContext, add_task};
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE, MapPermission};
@@ -271,6 +271,22 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// Spwan process from task.
+    pub fn spwan(&self, task: Arc<TaskControlBlock>, data: &[u8]) -> isize {
+        let mut inner = self.inner_exclusive_access();
+
+        let tcb = Arc::new(TaskControlBlock::new(data));
+
+        inner.parent = Some(Arc::downgrade(&task));
+        inner.children.push(tcb.clone());
+
+        let pid = tcb.pid.0 as isize;
+
+        add_task(tcb);
+
+        return pid;
     }
 }
 

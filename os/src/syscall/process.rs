@@ -9,7 +9,7 @@ use crate::{
     mm::{translated_refmut, translated_str, VirtAddr, MapPermission, translated_byte_buffer},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus, current_mmap, current_is_mapped, current_unmap, current_task_status, current_task_syscall
+        suspend_current_and_run_next, TaskStatus, current_mmap, current_is_mapped, current_unmap, current_task_status, current_task_syscall, current_task_spwan,
     }, timer::{get_time_us, get_time_ms},
 };
 
@@ -255,6 +255,14 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
+    debug!("entrying fn::sys_spwan");
+    
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    if let Some(data) = get_app_data_by_name(&path) {
+        let pid = current_task_spwan(data);
+        return pid;
+    }
     -1
 }
 

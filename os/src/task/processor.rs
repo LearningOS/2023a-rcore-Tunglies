@@ -4,7 +4,7 @@
 //! the current running state of CPU is recorded,
 //! and the replacement and transfer of control flow of different applications are executed.
 
-use super::__switch;
+use super::{__switch};
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::config::MAX_SYSCALL_NUM;
@@ -76,6 +76,12 @@ impl Processor {
     pub fn current_syscall(&self) -> [u32; MAX_SYSCALL_NUM] {
         self.current().unwrap().current_syscall()
     }
+
+    /// spwan a process
+    pub fn spwan(&self, data: &[u8]) -> isize {
+        let current = self.current().unwrap();
+        self.current().unwrap().spwan(current, data)
+    }
 }
 
 lazy_static! {
@@ -118,6 +124,11 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
     PROCESSOR.exclusive_access().current()
 }
 
+
+/// Spawn task
+pub fn current_task_spwan(data: &[u8]) -> isize {
+    PROCESSOR.exclusive_access().spwan(data)
+}
 
 /// Is Mapped
 pub fn current_is_mapped(start_va: VirtAddr, end_va: VirtAddr, mapped: bool) -> bool {
